@@ -197,6 +197,10 @@ async def upload_file(file_path, real_name, task_ctx=None):
 
     try:
         sent_item = None
+        thmb_path = None
+        seconds = 0
+        width, height = 0, 0
+
         if f_type == "video":
             file_path = videoExtFix(file_path)
 
@@ -210,7 +214,6 @@ async def upload_file(file_path, real_name, task_ctx=None):
                     task_ctx.cached_thumb = thmb_path
                     task_ctx.cached_duration = seconds
 
-            width, height = 0, 0
             if thmb_path and ospath.exists(thmb_path):
                 try:
                     with Image.open(thmb_path) as img:
@@ -218,6 +221,14 @@ async def upload_file(file_path, real_name, task_ctx=None):
                 except Exception as img_err:
                     logging.warning(f"Error reading thumbnail dimensions: {img_err}")
                     thmb_path = None
+        else:
+            # Check user custom thumbnail or global thumbnail for documents & audio
+            if user_id:
+                u_thumb = SettingsManager.get_user_thumb_path(user_id)
+                if ospath.exists(u_thumb):
+                    thmb_path = u_thumb
+            if not thmb_path and ospath.exists(Paths.THMB_PATH):
+                thmb_path = Paths.THMB_PATH
 
         async def _do_send(dest_chat):
             if f_type == "video":
