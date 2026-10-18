@@ -217,11 +217,11 @@ def YouTubeDL(url, task_ctx=None, cookie_path: str = ""):
         "logger": MyLogger(),
         "quiet": False,
         "no_warnings": False,
-        # Bypasses YouTube datacenter/Colab IP bot detection blocks
+        # Configure YouTube extractor args adaptively
+        # Never skip hls or dash (which removes all video/audio streams on YouTube!)
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "ios", "web"],
-                "skip": ["hls", "dash"],
+                "player_client": ["tv", "web_creator", "mweb", "web"] if (cookie_path and ospath.exists(cookie_path)) else ["tv", "web_creator", "mweb", "web", "android", "ios"],
             }
         },
     }
@@ -249,7 +249,7 @@ def YouTubeDL(url, task_ctx=None, cookie_path: str = ""):
         })
     else:
         if "height<=" in format_choice:
-            format_str = f"{format_choice}+ba/b/best"
+            format_str = f"{format_choice}/bv*+ba/b/best"
         elif format_choice in ["bv*+ba/b", "best"]:
             format_str = "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/b[ext=mp4]/b/best"
         else:
@@ -314,9 +314,11 @@ async def get_YT_Name(link, cookie_path: str = ""):
             "quiet": True,
             "geo_bypass": True,
             "nocheckcertificate": True,
+            "extract_flat": "in_playlist",
+            "skip_download": True,
             "extractor_args": {
                 "youtube": {
-                    "player_client": ["android", "ios", "mweb", "web"],
+                    "player_client": ["tv", "web_creator", "mweb", "web"] if (cookie_path and ospath.exists(cookie_path)) else ["tv", "web_creator", "mweb", "web", "android", "ios"],
                 }
             },
         }

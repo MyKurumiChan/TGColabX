@@ -116,7 +116,7 @@ if clone_res.returncode != 0 or not os.path.exists(repo_dir):
 # Remove any stale __pycache__ compiled files
 subprocess.run(f"find {repo_dir} -type d -name '__pycache__' -exec rm -rf {{}} +", shell=True)
 
-subprocess.run("apt update -y && apt install -y ffmpeg aria2 mediainfo p7zip-full unrar", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+subprocess.run("apt update -y && apt install -y ffmpeg aria2 mediainfo p7zip-full unrar nodejs", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 pip_res = subprocess.run(f"pip3 install --upgrade -r {repo_dir}/requirements.txt", shell=True, capture_output=True, text=True)
 if pip_res.returncode != 0:
     Working = False
