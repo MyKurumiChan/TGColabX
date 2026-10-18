@@ -744,21 +744,34 @@ async def status_command(client, message):
     if ACTIVE_TASKS:
         multi_text = render_multi_status(ACTIVE_TASKS)
         old_stat = CHAT_STATUS_MSGS.get(message.chat.id)
+        stat_msg = None
         if old_stat:
             try:
-                await old_stat.delete()
+                await old_stat.edit_text(
+                    text=multi_text,
+                    reply_markup=keyboard(),
+                    disable_web_page_preview=True,
+                )
+                stat_msg = old_stat
             except Exception:
                 pass
-        stat_msg = await colab_bot.send_message(
-            chat_id=message.chat.id,
-            text=multi_text,
-            reply_markup=keyboard(),
-            disable_web_page_preview=True,
-        )
-        CHAT_STATUS_MSGS[message.chat.id] = stat_msg
-        for t_ctx in ACTIVE_TASKS.values():
-            if t_ctx.chat_id == message.chat.id:
-                t_ctx.status_msg = stat_msg
+
+        if not stat_msg:
+            try:
+                stat_msg = await colab_bot.send_message(
+                    chat_id=message.chat.id,
+                    text=multi_text,
+                    reply_markup=keyboard(),
+                    disable_web_page_preview=True,
+                )
+            except Exception as e:
+                logging.warning(f"Error deploying status message: {e}")
+
+        if stat_msg:
+            CHAT_STATUS_MSGS[message.chat.id] = stat_msg
+            for t_ctx in ACTIVE_TASKS.values():
+                if t_ctx.chat_id == message.chat.id:
+                    t_ctx.status_msg = stat_msg
     elif BOT.State.task_going and MSG.status_msg:
         try:
             await colab_bot.send_message(chat_id=message.chat.id, text="<i>Task is currently running! Check status card above.</i>")

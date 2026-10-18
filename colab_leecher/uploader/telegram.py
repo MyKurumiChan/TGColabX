@@ -165,7 +165,7 @@ async def upload_file(file_path, real_name, task_ctx=None):
             task_ctx.done = sizeUnit(total_processed)
             task_ctx.left = sizeUnit(total_target)
             task_ctx.status_state = "Upload"
-            task_ctx.engine = "Pyrofork 💥"
+            task_ctx.engine = "DzGram ⚡"
 
             await status_bar(
                 down_msg=f"<b>📤 UPLOADING » </b><code>{real_name}</code>\n",
@@ -174,7 +174,7 @@ async def upload_file(file_path, real_name, task_ctx=None):
                 eta=task_ctx.eta,
                 done=task_ctx.done,
                 left=task_ctx.left,
-                engine="Pyrofork 💥",
+                engine="DzGram ⚡",
                 task_ctx=task_ctx,
             )
         else:
@@ -192,7 +192,7 @@ async def upload_file(file_path, real_name, task_ctx=None):
                 eta=getTime(max(0, eta)),
                 done=sizeUnit(total_processed),
                 left=sizeUnit(total_target),
-                engine="Pyrofork 💥",
+                engine="DzGram ⚡",
             )
 
     try:
@@ -278,13 +278,6 @@ async def upload_file(file_path, real_name, task_ctx=None):
             Transfer.sent_file_names.append(real_name)
             if ospath.exists(file_path):
                 Transfer.up_bytes.append(ospath.getsize(file_path))
-
-        # Proactively close idle media sessions after upload to prevent TCP resets & reconnect storms
-        if hasattr(colab_bot, "reap_media_sessions"):
-            try:
-                await colab_bot.reap_media_sessions(idle_timeout=0)
-            except Exception:
-                pass
 
         # Backup forward to global DUMP_ID if set and different from target
         from colab_leecher import DUMP_ID

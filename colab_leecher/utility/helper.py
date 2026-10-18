@@ -795,12 +795,18 @@ async def status_bar(down_msg, speed, percentage, eta, done, left, engine, statu
         if task_title:
             task_ctx.task_title = task_title
 
-        # Check task-level throttle (at least 2.2s between message edits to avoid floodwait)
-        if cur_time - getattr(task_ctx, "last_update", 0) < 2.2:
+        # Check task-level throttle (at least 3.5s between message edits to avoid floodwait)
+        if cur_time - getattr(task_ctx, "last_update", 0) < 3.5:
             return
         task_ctx.last_update = cur_time
 
-        target_msg = task_ctx.status_msg
+        from colab_leecher.utility.task_manager import CHAT_STATUS_MSGS
+        if task_ctx.chat_id in CHAT_STATUS_MSGS:
+            target_msg = CHAT_STATUS_MSGS[task_ctx.chat_id]
+            task_ctx.status_msg = target_msg
+        else:
+            target_msg = task_ctx.status_msg
+
         user_name = task_ctx.user_name or "Owner"
         mode_name = task_ctx.mode.capitalize()
         task_id_str = f" #{task_ctx.task_id}"
@@ -823,7 +829,7 @@ async def status_bar(down_msg, speed, percentage, eta, done, left, engine, statu
         markup = keyboard_for_multi(ACTIVE_TASKS)
     else:
         bar = get_progress_bar_string(percentage)
-        status_label = status_type or (task_ctx.status_state if task_ctx else BOT.StatusState) or ("Upload" if ("Pyrofork" in engine or "UPLOAD" in str(down_msg)) else "Download")
+        status_label = status_type or (task_ctx.status_state if task_ctx else BOT.StatusState) or ("Upload" if ("Pyrofork" in engine or "DzGram" in engine or "UPLOAD" in str(down_msg)) else "Download")
         engine_name = engine or (task_ctx.engine if task_ctx else BOT.CurrentEngine) or "Aria2c"
 
         start_t = task_ctx.start_time if task_ctx else BotTimes.task_start
@@ -835,7 +841,7 @@ async def status_bar(down_msg, speed, percentage, eta, done, left, engine, statu
         src_status_link = f"<a href='{src_link}'>{status_label}</a>" if src_link else status_label
         src_stop_link = f" | <a href='{src_link}'>Task 📌</a>" if src_link else ""
 
-        header = "<blockquote><b><i>TGColabX 🚀 (Based on WZML-X & XronTrix10)</i></b></blockquote>\n\n"
+        header = "<blockquote><b><i>TGColabX 🚀 Live Status</i></b></blockquote>\n\n"
 
         task_card = f"<b>1.</b> <b><code>{html.escape(name)}</code></b>{task_id_str}\n"
         task_card += f"<blockquote>╭ <b>Task By {html.escape(user_name)}</b>{src_link_header}\n"
@@ -880,10 +886,29 @@ async def status_bar(down_msg, speed, percentage, eta, done, left, engine, statu
         else:
             BotTimes.current_time = time() + f.value
     except BadRequest as e:
-        if "MESSAGE_NOT_MODIFIED" not in str(e):
-            logging.error(f"Status Not Modified: {str(e)}")
+        err_str = str(e)
+        if "MESSAGE_NOT_MODIFIED" in err_str:
+            pass
+        elif "MESSAGE_ID_INVALID" in err_str or "MESSAGE_EMPTY" in err_str:
+            if task_ctx:
+                try:
+                    new_msg = await colab_bot.send_message(
+                        chat_id=task_ctx.chat_id,
+                        text=full_text,
+                        reply_markup=markup,
+                        disable_web_page_preview=True
+                    )
+                    from colab_leecher.utility.task_manager import CHAT_STATUS_MSGS
+                    CHAT_STATUS_MSGS[task_ctx.chat_id] = new_msg
+                    task_ctx.status_msg = new_msg
+                except Exception:
+                    pass
+        else:
+            logging.error(f"Status update error: {err_str}")
     except Exception as e:
-        logging.error(f"Error Updating Status bar: {str(e)}")
+        err_str = str(e)
+        if "MESSAGE_NOT_MODIFIED" not in err_str:
+            logging.error(f"Error Updating Status bar: {err_str}")
 
 
 def keyboard(task_ctx=None):
@@ -891,6 +916,10 @@ def keyboard(task_ctx=None):
     from colab_leecher.utility.task_manager import ACTIVE_TASKS
     if len(ACTIVE_TASKS) > 1:
         return keyboard_for_multi(ACTIVE_TASKS)
+
+    # Automatically bind to active task if single task is running
+    if not task_ctx and ACTIVE_TASKS:
+        task_ctx = next(iter(ACTIVE_TASKS.values()))
 
     buttons = [
         [
@@ -966,7 +995,10 @@ def render_multi_status(active_tasks_dict: dict) -> str:
     if not active_tasks_dict:
         return ""
 
-    header = f"<blockquote><b><i>TGColabX 🚀 Live Status ({len(active_tasks_dict)} Active Downloads)</i></b></blockquote>\n\n"
+    if len(active_tasks_dict) > 1:
+        header = f"<blockquote><b><i>TGColabX 🚀 Live Status ({len(active_tasks_dict)} Active Tasks)</i></b></blockquote>\n\n"
+    else:
+        header = "<blockquote><b><i>TGColabX 🚀 Live Status</i></b></blockquote>\n\n"
     cards = []
 
     for idx, (t_id, ctx) in enumerate(active_tasks_dict.items(), start=1):

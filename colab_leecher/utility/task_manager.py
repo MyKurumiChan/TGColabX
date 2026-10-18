@@ -133,6 +133,7 @@ async def dispatch_task(mode_type: str, mode: str, is_ytdl: bool, links: list, u
     if not user_id:
         user_id = chat_id if chat_id > 0 else 0
 
+    tasks_to_start = []
     for link in links:
         # Duplicate detection: prevent re-downloading active or queued links
         duplicate_ctx = None
@@ -175,10 +176,9 @@ async def dispatch_task(mode_type: str, mode: str, is_ytdl: bool, links: list, u
         can_start = (max_parallel == 0) or (len(ACTIVE_TASKS) < max_parallel)
         if can_start:
             ACTIVE_TASKS[t_id] = ctx
+            tasks_to_start.append(ctx)
             BOT.State.task_going = True
-            loop = get_event_loop()
-            ctx.asyncio_task = loop.create_task(run_task_pipeline(ctx))
-            logging.info(f"[Parallel Engine] Task #{t_id} started! Total active tasks: {len(ACTIVE_TASKS)}")
+            logging.info(f"[Parallel Engine] Task #{t_id} queued for start! Total active tasks: {len(ACTIVE_TASKS)}")
         else:
             BOT.Queue.append(ctx)
             pos = len(BOT.Queue)
@@ -198,7 +198,7 @@ async def dispatch_task(mode_type: str, mode: str, is_ytdl: bool, links: list, u
         except Exception:
             pass
 
-    # Single-Window Live Dashboard: Edit existing window in-place or deploy a fresh one
+    # Single-Window Live Dashboard: Deploy or edit existing status card BEFORE running tasks
     old_stat = CHAT_STATUS_MSGS.get(chat_id)
     multi_txt = render_multi_status(ACTIVE_TASKS)
     new_stat_msg = None
@@ -218,7 +218,7 @@ async def dispatch_task(mode_type: str, mode: str, is_ytdl: bool, links: list, u
                 pass
             new_stat_msg = None
 
-    if not new_stat_msg:
+    if not new_stat_msg and ACTIVE_TASKS:
         try:
             new_stat_msg = await colab_bot.send_message(
                 chat_id=chat_id,
@@ -235,6 +235,13 @@ async def dispatch_task(mode_type: str, mode: str, is_ytdl: bool, links: list, u
             if t_c.chat_id == chat_id:
                 t_c.status_msg = new_stat_msg
 
+    # Now launch task pipelines concurrently with bound status cards
+    loop = get_event_loop()
+    for ctx in tasks_to_start:
+        if new_stat_msg:
+            ctx.status_msg = new_stat_msg
+        ctx.asyncio_task = loop.create_task(run_task_pipeline(ctx))
+
 
 async def run_task_pipeline(task_ctx: TaskContext):
     """Executes the full download -> process -> upload pipeline for an isolated task."""
@@ -245,10 +252,10 @@ async def run_task_pipeline(task_ctx: TaskContext):
 
         target_chat = task_ctx.chat_id or OWNER
 
-        # Bind or create live status message
+        # Bind to existing chat live status message or create if missing
         if target_chat in CHAT_STATUS_MSGS:
             task_ctx.status_msg = CHAT_STATUS_MSGS[target_chat]
-        else:
+        elif not task_ctx.status_msg:
             multi_txt = render_multi_status(ACTIVE_TASKS)
             try:
                 task_ctx.status_msg = await colab_bot.send_message(

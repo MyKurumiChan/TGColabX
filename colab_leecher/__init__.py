@@ -14,13 +14,18 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 # DzGram MTProto High-Performance Transfer Tuning (Connection Pooling, Rust WarpCrypto & Adaptive Pacing)
-os.environ.setdefault("DZGRAM_BOT_UPLOAD_POOL", "4")
+os.environ.setdefault("DZGRAM_BOT_UPLOAD_POOL", "2")
 os.environ.setdefault("DZGRAM_BOT_UPLOAD_RATE", "256")
-os.environ.setdefault("DZGRAM_BOT_UPLOAD_WORKERS", "4")
-os.environ.setdefault("DZGRAM_BOT_DL_POOL", "4")
-os.environ.setdefault("DZGRAM_BOT_DL_WORKERS", "4")
-os.environ.setdefault("DZGRAM_CRYPTO_WORKERS", "4")
-os.environ.setdefault("DZGRAM_MEDIA_SESSION_IDLE_TIMEOUT", "30")
+os.environ.setdefault("DZGRAM_BOT_UPLOAD_WORKERS", "2")
+os.environ.setdefault("DZGRAM_BOT_DL_POOL", "2")
+os.environ.setdefault("DZGRAM_BOT_DL_WORKERS", "2")
+os.environ.setdefault("DZGRAM_CRYPTO_WORKERS", "2")
+os.environ.setdefault("DZGRAM_MEDIA_SESSION_IDLE_TIMEOUT", "120")
+
+# Clean logging: filter out internal MTProto connection/ping noise
+logging.getLogger("pyrogram.session.session").setLevel(logging.ERROR)
+logging.getLogger("pyrogram.session.auth").setLevel(logging.WARNING)
+logging.getLogger("pyrogram.connection.connection").setLevel(logging.WARNING)
 
 bot_start_time = time()
 
