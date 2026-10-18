@@ -217,16 +217,11 @@ def YouTubeDL(url, task_ctx=None, cookie_path: str = ""):
         "logger": MyLogger(),
         "quiet": False,
         "no_warnings": False,
-        # Configure YouTube extractor args adaptively
-        # Never skip hls or dash (which removes all video/audio streams on YouTube!)
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["tv", "web_creator", "mweb", "web"] if (cookie_path and ospath.exists(cookie_path)) else ["tv", "web_creator", "mweb", "web", "android", "ios"],
-            }
-        },
+        "js_runtimes": {"node": {}},
     }
 
-    if cookie_path and ospath.exists(cookie_path):
+    has_cookies = bool(cookie_path and ospath.exists(cookie_path))
+    if has_cookies:
         base_ydl_opts["cookiefile"] = cookie_path
         logging.info(f"Attached cookies to yt-dlp: {cookie_path}")
 
@@ -280,26 +275,39 @@ def YouTubeDL(url, task_ctx=None, cookie_path: str = ""):
                     break
 
         if not has_file:
-            logging.warning("No complete file found after initial attempt. Retrying with format 'best'...")
-            fallback_opts = dict(base_ydl_opts)
-            fallback_opts["format"] = "b/best"
-            fallback_opts.pop("postprocessors", None)
-            with yt_dlp.YoutubeDL(fallback_opts) as ydl_fb:
-                ydl_fb.download([url])
+            raise RuntimeError("No complete media file was downloaded.")
 
     except Exception as e:
-        logging.warning(f"Initial yt-dlp attempt failed: {e}. Retrying with generic fallback 'b/best'...")
-        try:
-            fallback_opts = dict(base_ydl_opts)
-            fallback_opts["format"] = "b/best"
-            fallback_opts.pop("postprocessors", None)
-            with yt_dlp.YoutubeDL(fallback_opts) as ydl_fallback:
-                ydl_fallback.download([url])
-            logging.info("yt-dlp fallback download succeeded!")
-        except Exception as e2:
-            logging.error(f"YTDL ERROR completely failed: {e2}")
-            if task_ctx:
-                task_ctx.error = str(e2)
+        logging.warning(f"Initial yt-dlp attempt failed: {e}.")
+        success = False
+
+        # If cookies were attached, retry cleanly without cookies in case cookies are expired/flagged
+        if has_cookies:
+            logging.info("Retrying without cookies to bypass potential cookie session error...")
+            try:
+                clean_opts = dict(ydl_opts)
+                clean_opts.pop("cookiefile", None)
+                with yt_dlp.YoutubeDL(clean_opts) as ydl_clean:
+                    ydl_clean.download([url])
+                success = True
+                logging.info("yt-dlp download succeeded without cookies!")
+            except Exception as e_clean:
+                logging.warning(f"Attempt without cookies also encountered: {e_clean}")
+
+        if not success:
+            try:
+                logging.info("Retrying with generic fallback 'b/best'...")
+                fallback_opts = dict(base_ydl_opts)
+                fallback_opts.pop("cookiefile", None)
+                fallback_opts["format"] = "b/best"
+                fallback_opts.pop("postprocessors", None)
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl_fallback:
+                    ydl_fallback.download([url])
+                logging.info("yt-dlp fallback download succeeded!")
+            except Exception as e2:
+                logging.error(f"YTDL ERROR completely failed: {e2}")
+                if task_ctx:
+                    task_ctx.error = str(e2)
 
 
 async def get_YT_Name(link, cookie_path: str = ""):
@@ -308,7 +316,7 @@ async def get_YT_Name(link, cookie_path: str = ""):
     if not cookie_path:
         cookie_path = SettingsManager.get_cookie_path()
 
-    def _extract():
+    def _extract(use_cookie=True):
         opts = {
             "logger": MyLogger(),
             "quiet": True,
@@ -316,19 +324,19 @@ async def get_YT_Name(link, cookie_path: str = ""):
             "nocheckcertificate": True,
             "extract_flat": "in_playlist",
             "skip_download": True,
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["tv", "web_creator", "mweb", "web"] if (cookie_path and ospath.exists(cookie_path)) else ["tv", "web_creator", "mweb", "web", "android", "ios"],
-                }
-            },
+            "js_runtimes": {"node": {}},
         }
-        if cookie_path and ospath.exists(cookie_path):
+        if use_cookie and cookie_path and ospath.exists(cookie_path):
             opts["cookiefile"] = cookie_path
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(link, download=False)
 
     try:
-        info = await loop.run_in_executor(None, _extract)
+        try:
+            info = await loop.run_in_executor(None, lambda: _extract(True))
+        except Exception:
+            info = await loop.run_in_executor(None, lambda: _extract(False))
+
         if info:
             if "title" in info and info["title"]:
                 return info["title"]
